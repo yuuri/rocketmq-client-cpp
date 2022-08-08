@@ -658,6 +658,7 @@ int SetProducerLogPath(CProducer* producer, const char* logPath) {
   if (producer == NULL) {
     return NULL_POINTER;
   }
+  setenv(ROCKETMQ_CLIENT_LOG_DIR.c_str(), logPath, 1);
   return OK;
 }
 
