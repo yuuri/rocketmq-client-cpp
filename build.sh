@@ -27,7 +27,7 @@ fname_libevent="libevent*.zip"
 fname_jsoncpp="jsoncpp*.zip"
 fname_boost="boost*.tar.gz"
 fname_libevent_down="release-2.1.11-stable.zip"
-fname_jsoncpp_down="0.10.6.zip"
+fname_jsoncpp_down="0.10.7.zip"
 fname_boost_down="1.58.0/boost_1_58_0.tar.gz"
 
 PrintParams() {
@@ -247,7 +247,8 @@ BuildJsonCPP() {
   echo "build jsoncpp success."
   if [ ! -f ${install_lib_dir}/lib/libjsoncpp.a ]; then
     echo " ./bin/lib directory is not libjsoncpp.a"
-    cp ${install_lib_dir}/lib/x86_64-linux-gnu/libjsoncpp.a ${install_lib_dir}/lib/
+    cp ${install_lib_dir}/lib/$(uname- m)-linux-gnu/libjsoncpp.a ${install_lib_dir}/lib/
+#    cp ${install_lib_dir}/lib/x86_64-linux-gnu/libjsoncpp.a ${install_lib_dir}/lib/
   fi
 }
 
@@ -264,7 +265,7 @@ BuildBoost() {
     wget http://sourceforge.net/projects/boost/files/boost/${fname_boost_down}
   fi
   tar -zxvf ${fname_boost} >unzipboost.txt 2>&1
-  boost_dir=$(ls | grep boost | grep .*[^gz]$)
+  boost_dir=$(ls | grep boost | grep .*[^gz^txt]$)
   cd ${boost_dir}
   if [ $? -ne 0 ]; then
     exit 1
@@ -277,9 +278,20 @@ BuildBoost() {
   pwd
   if [ $verbose -eq 0 ]; then
     echo "build boost without detail log."
-    ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir} >boostbuild.txt 2>&1
+    if [ "$(uname -m)" = "aarch64" ]; then
+      ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir} architecture=arm &> boostbuild.txt
+    else
+      ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir} &> boostbuild.txt
+    fi
+#    ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir} >boostbuild.txt 2>&1
   else
-    ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir}
+    if [ "$(uname -m)" = "aarch64" ]; then
+      ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir} architecture=arm
+    else
+      echo ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir}
+      ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir}
+    fi
+#    ./b2 -j$cpu_num cflags=-fPIC cxxflags=-fPIC --with-atomic --with-thread --with-system --with-chrono --with-date_time --with-log --with-regex --with-serialization --with-filesystem --with-locale --with-iostreams threading=multi link=static release install --prefix=${install_lib_dir}
   fi
   if [ $? -ne 0 ]; then
     exit 1
@@ -289,15 +301,36 @@ BuildBoost() {
 BuildRocketMQClient() {
   cd ${build_dir}
   echo "============start to build rocketmq client cpp.========="
-  if [ $test -eq 0 ]; then
-    cmake ..
-  else
+
+  local ROCKETMQ_CMAKE_FLAG=""
+  if [ $test -eq 1 ]; then
     if [ $codecov -eq 1 ]; then
-      cmake .. -DRUN_UNIT_TEST=ON -DCODE_COVERAGE=ON
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DRUN_UNIT_TEST=ON -DCODE_COVERAGE=ON"
     else
-      cmake .. -DRUN_UNIT_TEST=ON
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DRUN_UNIT_TEST=ON -DCODE_COVERAGE=OFF"
     fi
+  else
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DRUN_UNIT_TEST=OFF -DCODE_COVERAGE=OFF"
   fi
+  if [ $enable_asan -eq 1 ]; then
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DENABLE_ASAN=ON"
+  else
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DENABLE_ASAN=OFF"
+  fi
+  if [ $enable_lsan -eq 1 ]; then
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DENABLE_LSAN=ON"
+  else
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DENABLE_LSAN=OFF"
+  fi
+  if [ $debug -eq 1 ]; then
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DCMAKE_BUILD_TYPE=Debug"
+  else
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DCMAKE_BUILD_TYPE=Release"
+  fi
+  if [ "$(uname -m)" = "aarch64" ]; then
+      ROCKETMQ_CMAKE_FLAG=$ROCKETMQ_CMAKE_FLAG" -DBUILD_FOR_ARM=ON"
+  fi
+  cmake .. $ROCKETMQ_CMAKE_FLAG
   if [ $verbose -eq 0 ]; then
     echo "build rocketmq without detail log."
     make -j $cpu_num >buildclient.txt 2>&1
